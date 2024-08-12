@@ -1,13 +1,15 @@
 mod cpu;
 use cpu::*;
 
+use std::time::Instant;
+
 use std::env;
 
 use sdl2::event::Event;
-use sdl2::pixels::Color;
+use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::Rect;
-use sdl2::render::Canvas;
-use sdl2::video::Window;
+use sdl2::render::{Canvas, Texture, TextureAccess, TextureCreator};
+use sdl2::video::{Window, WindowContext};
 use sdl2::keyboard::Keycode;
 
 
@@ -42,6 +44,7 @@ fn main() {
     let mut event_pump = sdl_context.event_pump().unwrap();
     
     'gameloop: loop {
+        let start = Instant::now();
         for evt in event_pump.poll_iter() {
             match evt {
                 Event::Quit{..} => {
@@ -61,26 +64,35 @@ fn main() {
             }
         }
         cpu.cycle();
-        
-        draw_screen(&cpu, &mut canvas, video_scale as u32)
+        draw_screen(&cpu, &mut canvas, video_scale);
+        println!("{:?}", start.elapsed());
     }
 }
 
-fn draw_screen(cpu: &Chip8, canvas: &mut Canvas<Window>,scale: u32) {
+fn draw_screen(cpu: &Chip8, canvas: &mut Canvas<Window>, scale: u16) {
+
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
 
     let screen_buf = cpu.get_display();
-    canvas.set_draw_color(Color::RGB(255, 255, 255));
-    for (i, pixel) in screen_buf.iter().enumerate() {
-        if *pixel != 0 {
-            let x = (i % 64) as u32;
-            let y = (i / 64) as u32;
 
-            let rect = Rect::new((x * scale) as i32, (y * scale) as i32, scale, scale);
-            canvas.fill_rect(rect).unwrap();
+    let scale = scale as u32;
+
+    canvas.set_draw_color(Color::RGB(255, 255, 255));
+    for y in 0..32 {
+        for x in 0..64 {
+            let index = y * 64 + x;
+            if screen_buf[index] != 0 {
+                let _ = canvas.fill_rect(Rect::new(
+                    (x as u32 * scale) as i32,
+                    (y as u32 * scale) as i32,
+                    scale,
+                    scale
+                ));
+            }
         }
     }
+
     canvas.present();
 }
 

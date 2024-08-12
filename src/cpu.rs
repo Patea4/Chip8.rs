@@ -76,9 +76,6 @@ impl Chip8 {
         
         self.pc += 2;
 
-        
-        println!("{:x?}", self.opcode);
-
         match (digit1, digit2, digit3, digit4) {
             (0, 0, 0xe, 0) => self.op_00e0(),
             (0, 0, 0xe, 0xe) => self.op_00ee(),
