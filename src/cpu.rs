@@ -1,6 +1,7 @@
 #![allow(dead_code)] // Remove after testing
 
 use std::fs;
+use rand::{thread_rng, Rng};
 
 const START_ADDRESS: usize = 0x200; // Where rom instructions start being stored
 const FONT_START_ADDRESS: usize = 0x50; // Where rom instructions start being stored
@@ -80,11 +81,47 @@ impl Chip8 {
 
         match (digit1, digit2, digit3, digit4) {
             (0, 0, 0xe, 0) => self.op_00e0(),
+            (0, 0, 0xe, 0xe) => self.op_00ee(),
+            // Unique first digit opcodes
             (1, ..) => self.op_1nnn(),
+            (2, ..) => self.op_2nnn(),
+            (3, ..) => self.op_3xkk(),
+            (4, ..) => self.op_4xkk(),
+            (5, ..) => self.op_5xy0(),
             (6, ..) => self.op_6xkk(),
             (7, ..) => self.op_7xkk(),
+            (9, ..) => self.op_9xy0(),
             (0xA, ..) => self.op_annn(),
+            (0xB, ..) => self.op_bnnn(),
+            (0xC, ..) => self.op_cxkk(),
             (0xd, ..) => self.op_dxyn(),
+            
+            // 8 Table
+            (8, .., 0) => self.op_8xy0(),
+            (8, .., 1) => self.op_8xy1(),
+            (8, .., 2) => self.op_8xy2(),
+            (8, .., 3) => self.op_8xy3(),
+            (8, .., 4) => self.op_8xy4(),
+            (8, .., 5) => self.op_8xy5(),
+            (8, .., 6) => self.op_8xy6(),
+            (8, .., 7) => self.op_8xy7(),
+            (8, .., 0xe) => self.op_8xye(),
+
+            // E table
+            (0xE, _, 0xA, 1) => self.op_exa1(),
+            (0xE, _, 0x9, 0xE) => self.op_ex9e(),
+            
+            // F Table
+            (0xF, _, 0, 7) => self.op_fx07(),
+            (0xF, _, 0, 0xA) => self.op_fx0a(),
+            (0xF, _, 1, 5) => self.op_fx15(),
+            (0xF, _, 1, 8) => self.op_fx18(),
+            (0xF, _, 1, 0xE) => self.op_fx1e(),
+            (0xF, _, 2, 9) => self.op_fx29(),
+            (0xF, _, 3, 3) => self.op_fx33(),
+            (0xF, _, 5, 5) => self.op_fx55(),
+            (0xF, _, 6, 5) => self.op_fx65(),
+
             _ => ()
         }
 
@@ -95,6 +132,10 @@ impl Chip8 {
         if self.sound_timer > 0 {
             self.sound_timer -= 1;
         }
+    }
+
+    pub fn update_key(&mut self, key: usize, value: usize) {
+        self.keypad[key] = value as u8;
     }
 
     pub fn load_rom(&mut self, filename: &str) {
@@ -111,9 +152,47 @@ impl Chip8 {
         self.video.fill(0);   
     }
 
+    fn op_00ee(&mut self) {
+        self.sp -= 1;
+        self.pc = self.stack[self.sp as usize];
+    }
+
     fn op_1nnn(&mut self) {
         let addr: u16 = self.opcode & 0xFFF;
         self.pc = addr;
+    }
+
+    fn op_2nnn(&mut self) {
+        let addr: u16 = self.opcode & 0xFFF;
+
+        self.stack[self.sp as usize]  = self.pc;
+        self.sp += 1;
+        self.pc = addr;
+    }
+
+    fn op_3xkk(&mut self) {
+        let vx = (self.opcode >> 8) & 0x00F;
+        let kk = self.opcode & 0x00FF;
+        if self.registers[vx as usize] as u16 == kk {
+            self.pc += 2;
+        }
+    }
+    
+    fn op_4xkk(&mut self) {
+        let vx = (self.opcode >> 8) & 0x00F;
+        let kk = self.opcode & 0x00FF;
+        if self.registers[vx as usize] as u16 != kk {
+            self.pc += 2;
+        }
+    }
+
+    fn op_5xy0(&mut self) {
+        let vx = (self.opcode >> 8) & 0x00F;
+        let vy = (self.opcode >> 4) & 0x00F;
+
+        if self.registers[vx as usize] == self.registers[vy as usize] {
+            self.pc += 2
+        }
     }
 
     fn op_6xkk(&mut self) {
@@ -127,7 +206,112 @@ impl Chip8 {
         let vx = (self.opcode >> 8) & 0x00F;
         let kk = self.opcode & 0x00FF;
 
-        self.registers[vx as usize] += kk as u8;
+        self.registers[vx as usize] = self.registers[vx as usize].wrapping_add(kk as u8);
+    }
+
+    fn op_8xy0(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let vy = ((self.opcode >> 4) & 0x00F) as usize;
+
+        self.registers[vx] = self.registers[vy];
+    }
+    
+    fn op_8xy1(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let vy = ((self.opcode >> 4) & 0x00F) as usize;
+
+        self.registers[vx] |= self.registers[vy];
+    }
+    
+    fn op_8xy2(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let vy = ((self.opcode >> 4) & 0x00F) as usize;
+
+        self.registers[vx] &= self.registers[vy];
+    }
+    
+    fn op_8xy3(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let vy = ((self.opcode >> 4) & 0x00F) as usize;
+
+        self.registers[vx] ^= self.registers[vy];
+    }
+
+    fn op_8xy4(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let vy = ((self.opcode >> 4) & 0x00F) as usize;
+
+        let sum: u16 = self.registers[vx].wrapping_add(self.registers[vy]).into();
+
+        if sum > 255 {
+            self.registers[15] = 1;
+        } else {
+            self.registers[15] = 0;
+        }
+
+        self.registers[vx] = (sum & 0xFF) as u8;
+    }
+
+    fn op_8xy5(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let vy = ((self.opcode >> 4) & 0x00F) as usize;
+        
+        if self.registers[vx] > self.registers[vy] {
+            self.registers[15] = 1;
+        } else {
+            self.registers[15] = 0;
+        }
+
+        self.registers[vx] = self.registers[vx].wrapping_sub(self.registers[vy]);
+    }
+
+
+    fn op_8xy6(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let least = self.registers[vx] & 0x1;
+        
+        if least == 1 {
+            self.registers[15] = 1
+        } else {
+            self.registers[15] = 0
+        }
+
+        self.registers[vx] >>= 1;
+    }
+
+    fn op_8xy7(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let vy = ((self.opcode >> 4) & 0x00F) as usize;
+         
+        if self.registers[vx] < self.registers[vy] {
+            self.registers[15] = 1;
+        } else {
+            self.registers[15] = 0;
+        }
+
+        self.registers[vx] = self.registers[vy] - self.registers[vx];
+    }
+    
+    fn op_8xye(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let most = (self.registers[vx] & 0x80) >> 7;
+        
+        if most == 1 {
+            self.registers[15] = 1
+        } else {
+            self.registers[15] = 0
+        }
+
+        self.registers[vx] <<= 1;
+    }
+
+    fn op_9xy0(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let vy = ((self.opcode >> 4) & 0x00F) as usize;
+
+        if self.registers[vx] != self.registers[vy] {
+            self.pc += 2;
+        }
     }
 
     fn op_annn(&mut self) {
@@ -135,8 +319,22 @@ impl Chip8 {
         self.index = addr;
     }
 
-    pub fn op_dxyn(&mut self) {
-        println!("dasopidsada");
+    fn op_bnnn(&mut self) {
+        let addr = self.opcode & 0xFFF;
+        self.pc = addr + self.registers[0] as u16;
+    }
+
+    fn op_cxkk(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let kk = self.opcode & 0x00FF;
+        
+        let mut rng = rand::thread_rng();
+        let rand = rng.gen_range(0..=255);
+
+        self.registers[vx] = (rand & kk) as u8;
+    }
+
+    fn op_dxyn(&mut self) {
         let vx = (self.opcode >> 8) & 0x00F;
         let vy = (self.opcode >> 4) & 0x00F;
         let height = self.opcode & 0x000F;
@@ -154,8 +352,7 @@ impl Chip8 {
 
             for col in 0..8 {
                 let sprite_pixel = sprite_byte & (0b10000000 >> col);
-                let screen_pixel = &mut self.video[(y_pos as usize + row as usize) * VIDEO_WIDTH as usize + (x_pos as usize + col as usize)];
-                println!("row: {row}, col: {col}, pixel: {}", sprite_pixel);
+                let screen_pixel = &mut self.video[((y_pos as usize + row as usize) * VIDEO_WIDTH as usize + (x_pos as usize + col as usize)) % 2048];
                 // on
                 if sprite_pixel != 0 {
                     
@@ -170,11 +367,95 @@ impl Chip8 {
             }
         }
     }
-    
-}
-
 
     
+    fn op_ex9e(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let key = self.registers[vx];
+
+        if self.keypad[key as usize] == 1 {
+            self.pc += 2
+        }
+    }
+
+    fn op_exa1(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let key = self.registers[vx];
+        
+        if self.keypad[key as usize] == 0 {
+            self.pc += 2
+        }
+    }
+    
+    fn op_fx07(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        self.registers[vx] = self.delay_timer;
+    }
+
+    fn op_fx0a(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+
+        let index = self.keypad.iter().position(|&x| x == 1);
+
+        match index {
+            Some(key) => self.registers[vx] = key as u8,
+            None => self.pc += 2
+        }
+    }
+
+    fn op_fx15(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        self.delay_timer = self.registers[vx];
+    }
+
+    fn op_fx18(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        self.sound_timer = self.registers[vx];
+    }
+
+    fn op_fx1e(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        self.index += self.registers[vx] as u16;
+    }
+
+    fn op_fx29(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let digit = self.registers[vx];
+
+        self.index = 0x50 + (5 * digit) as u16;
+    }
+
+    fn op_fx33(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        let mut value = self.registers[vx];
+
+        let ones = value % 10;
+        value /= 10;
+        let tens = value % 10;
+        value /=10;
+        let hundreds = value % 10;
+
+        self.memory[self.index as usize] = hundreds;
+        self.memory[(self.index + 1 ) as usize] = tens;
+        self.memory[(self.index + 2 ) as usize] = ones;
+    }
+    
+    fn op_fx55(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        for i in 0..vx+1 {
+            self.memory[(self.index + i as u16) as usize] = self.registers[i];
+        }
+    }
+
+    fn op_fx65(&mut self) {
+        let vx = ((self.opcode >> 8) & 0x00F) as usize;
+        for i in 0..vx+1 {
+            self.registers[i]  = self.memory[(self.index + i as u16) as usize]
+        }
+    }
+} 
+
+
 
 #[cfg(test)]
 mod tests {
@@ -245,5 +526,25 @@ mod tests {
         let mut cpu = Chip8::new();
         cpu.opcode = 0xd25f;
         cpu.op_dxyn();
+    }
+
+    #[test]
+    fn test_3xkk() {
+        let mut cpu = Chip8::new();
+        cpu.registers[0] = 0x0e;
+        cpu.opcode = 0x300e;
+        cpu.pc = 200;
+        cpu.op_3xkk();
+        assert_eq!(cpu.pc, 202);
+    }
+
+    #[test]
+    fn test_fx0a() {
+        let mut cpu = Chip8::new();
+        cpu.keypad[12] = 1;
+        cpu.opcode = 0xf00a;
+        assert_eq!(cpu.registers[0], 0);
+        cpu.op_fx0a();
+        assert_eq!(cpu.registers[0], 12);
     }
 }
