@@ -6,12 +6,11 @@ use std::time::Instant;
 use std::env;
 
 use sdl2::event::Event;
-use sdl2::pixels::{Color, PixelFormatEnum};
-use sdl2::rect::Rect;
-use sdl2::render::{Canvas, Texture, TextureAccess, TextureCreator};
-use sdl2::video::{Window, WindowContext};
 use sdl2::keyboard::Keycode;
-
+use sdl2::pixels::Color;
+use sdl2::rect::Rect;
+use sdl2::render::Canvas;
+use sdl2::video::Window;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -25,13 +24,18 @@ fn main() {
     let mut cpu = Chip8::new();
     let sdl_context = sdl2::init().unwrap();
     cpu.load_rom(filename);
-    
-    let emulated_width:u16 = 64;
-    let emulated_height:u16 = 32;
-    let video_scale:u16 = 15;
-     
+
+    let emulated_width: u16 = 64;
+    let emulated_height: u16 = 32;
+    let video_scale: u16 = 5;
+
     let video = sdl_context.video().expect("Unable to initialize video");
-    let window = video.window("Chip8 Emulator", (emulated_width * video_scale).into(), (emulated_height * video_scale).into())
+    let window = video
+        .window(
+            "Chip8 Emulator",
+            (emulated_width * video_scale).into(),
+            (emulated_height * video_scale).into(),
+        )
         .position_centered()
         .opengl()
         .build()
@@ -42,25 +46,29 @@ fn main() {
     canvas.present();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
-    
+
     'gameloop: loop {
         let start = Instant::now();
         for evt in event_pump.poll_iter() {
             match evt {
-                Event::Quit{..} => {
+                Event::Quit { .. } => {
                     break 'gameloop;
-                },
-                Event::KeyDown{keycode: Some(key), ..} => {
+                }
+                Event::KeyDown {
+                    keycode: Some(key), ..
+                } => {
                     if let Some(k) = key2btn(key) {
                         cpu.update_key(k, 1);
                     }
-                },
-                Event::KeyUp{keycode: Some(key), ..} => {
+                }
+                Event::KeyUp {
+                    keycode: Some(key), ..
+                } => {
                     if let Some(k) = key2btn(key) {
                         cpu.update_key(k, 0);
                     }
-                },
-                _ => ()
+                }
+                _ => (),
             }
         }
         cpu.cycle();
@@ -70,7 +78,6 @@ fn main() {
 }
 
 fn draw_screen(cpu: &Chip8, canvas: &mut Canvas<Window>, scale: u16) {
-
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
 
@@ -87,7 +94,7 @@ fn draw_screen(cpu: &Chip8, canvas: &mut Canvas<Window>, scale: u16) {
                     (x as u32 * scale) as i32,
                     (y as u32 * scale) as i32,
                     scale,
-                    scale
+                    scale,
                 ));
             }
         }
@@ -114,7 +121,6 @@ fn key2btn(key: Keycode) -> Option<usize> {
         Keycode::X => Some(0x0),
         Keycode::C => Some(0xB),
         Keycode::V => Some(0xF),
-        _ => None
+        _ => None,
     }
-
 }
